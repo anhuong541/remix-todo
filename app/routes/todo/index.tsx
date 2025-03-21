@@ -1,37 +1,47 @@
 "use client";
 
+import { TodoItems } from "~/components/todo/TodoItem";
 import { useMemo, useState } from "react";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Todo } from "~/types/todo";
+import { useLoaderData, useMatches } from "@remix-run/react";
+import { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
+import { todoNetwork } from "~/libs/network";
+import AddTodo from "~/components/todo/AddTodo";
 
-type Todo = {
-  id: string;
-  text: string;
-  completed: boolean;
+const getTodos = async () => {
+  return await todoNetwork.get("/").catch((error) => {
+    console.error("error => ", error);
+    throw Error(error);
+  });
 };
 
+export const handle = {
+  its: "all yours",
+};
+
+export const meta: MetaFunction = ({ error }) => {
+  console.log("Meta Err: ", error);
+  return [{ title: error ? "oops!" : "Todo List" }];
+};
+
+export async function action({ request }: ActionFunctionArgs) {
+  const body = await request.formData();
+  console.log("action trigger at server => ", body);
+  return null;
+}
+
+export async function loader() {
+  return (await getTodos()).data;
+}
+
 export default function TodoList() {
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: "1", text: "Learn React", completed: true },
-    { id: "2", text: "Build a todo app", completed: false },
-    { id: "3", text: "Deploy to production", completed: false },
-  ]);
-  const [newTodo, setNewTodo] = useState("");
+  const matchs = useMatches();
+  console.log({ matchs });
+  const todoData = useLoaderData<typeof loader>();
+  const [todos, setTodos] = useState<Todo[]>(todoData.todos);
   const [activeTab, setActiveTab] = useState("all");
 
-  const addTodo = () => {
-    if (newTodo.trim() === "") return;
-
-    const todo: Todo = {
-      id: Date.now().toString(),
-      text: newTodo,
-      completed: false,
-    };
-
-    setTodos([...todos, todo]);
-    setNewTodo("");
-  };
-
-  const toggleTodo = (id: string) => {
+  const toggleTodo = (id: number) => {
     setTodos(
       todos.map((todo) =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
@@ -39,15 +49,26 @@ export default function TodoList() {
     );
   };
 
-  const deleteTodo = (id: string) => {
+  const deleteTodo = (id: number) => {
     setTodos(todos.filter((todo) => todo.id !== id));
   };
 
   const { activeTodos, completedTodos } = useMemo(
-    () => ({
-      activeTodos: todos.filter((todo) => !todo.completed),
-      completedTodos: todos.filter((todo) => todo.completed),
-    }),
+    () =>
+      todos.reduce(
+        (
+          store: { activeTodos: Todo[]; completedTodos: Todo[] },
+          todo: Todo
+        ) => {
+          if (todo.completed) {
+            store.activeTodos.push(todo);
+          } else {
+            store.completedTodos.push(todo);
+          }
+          return store;
+        },
+        { activeTodos: [], completedTodos: [] }
+      ),
     [todos]
   );
 
@@ -68,26 +89,7 @@ export default function TodoList() {
         </div>
 
         <div className="px-6 py-4">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              placeholder="Add a new task..."
-              value={newTodo}
-              onChange={(e) => setNewTodo(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  addTodo();
-                }
-              }}
-              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <button
-              onClick={addTodo}
-              className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
+          <AddTodo setTodos={setTodos} todos={todos} />
 
           <div className="mt-6">
             <div className="grid grid-cols-3 gap-1 rounded-md bg-gray-100 p-1">
@@ -138,54 +140,5 @@ export default function TodoList() {
         </div>
       </div>
     </div>
-  );
-}
-
-function TodoItems({
-  todos,
-  onToggle,
-  onDelete,
-}: {
-  todos: Todo[];
-  onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  if (todos.length === 0) {
-    return <p className="py-4 text-center text-gray-500">No tasks found</p>;
-  }
-
-  return (
-    <ul className="space-y-2">
-      {todos.map((todo) => (
-        <li
-          key={todo.id}
-          className="flex items-center gap-2 rounded-md border border-gray-200 p-3 shadow-sm"
-        >
-          <button
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
-              todo.completed
-                ? "bg-blue-600 text-white"
-                : "border border-gray-300 bg-white hover:bg-gray-50"
-            }`}
-            onClick={() => onToggle(todo.id)}
-          >
-            {todo.completed && <Check className="h-4 w-4" />}
-          </button>
-          <span
-            className={`flex-1 ${
-              todo.completed ? "text-gray-400 line-through" : "text-gray-700"
-            }`}
-          >
-            {todo.text}
-          </span>
-          <button
-            className="flex h-6 w-6 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-red-500"
-            onClick={() => onDelete(todo.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }

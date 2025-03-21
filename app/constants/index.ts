@@ -1,0 +1,1 @@
+export const BIG_RANDOM_NUM = 10000000000000;
